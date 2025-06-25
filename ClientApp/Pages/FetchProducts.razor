@@ -1,0 +1,85 @@
+@page "/fetchproducts"
+@inject HttpClient Http
+
+<h3>Product List</h3>
+
+<ul>
+    @if (products != null)
+    {
+        foreach (var product in products)
+        {
+            <li>@product.Name - $@product.Price (Stock: @product.Stock)</li>
+        }
+    }
+    else if (isLoading)
+    {
+        <li>Loading...</li>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <li style="color: red;">Error: @errorMessage</li>
+    }
+    else
+    {
+        <li>No products found.</li>
+    }
+</ul>
+
+@code {
+    private Product[]? products;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = string.Empty;
+            
+            // Make API call to fetch products
+            var response = await Http.GetAsync("/api/products");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonContent = await response.Content.ReadAsStringAsync();
+                products = System.Text.Json.JsonSerializer.Deserialize<Product[]>(jsonContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            else
+            {
+                errorMessage = $"Failed to fetch products. Status: {response.StatusCode}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Network error: {ex.Message}";
+        }
+        catch (TaskCanceledException ex)
+        {
+            errorMessage = "Request timed out. Please try again.";
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            errorMessage = "Failed to parse product data.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An unexpected error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class Product
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public double Price { get; set; }
+        public int Stock { get; set; }
+    }
+}
