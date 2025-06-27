@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FullStackApp.Backend.Controllers
 {
     [ApiController]
-    [Route("api/productlist")]
+    [Route("api/products")]
     public class ProductsController : ControllerBase
     {
         [HttpGet]
