@@ -38,15 +38,22 @@
             isLoading = true;
             errorMessage = string.Empty;
             
-            // Make API call to fetch products
             var response = await Http.GetAsync("/api/productlist");
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
             
-            if (response.IsSuccessStatusCode)
+            // Try to deserialize as standard Product array first
+            try
             {
-                var jsonContent = await response.Content.ReadAsStringAsync();
-                
-                // Handle the malformed JSON with different property names
-                var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(jsonContent, new JsonSerializerOptions
+                products = System.Text.Json.JsonSerializer.Deserialize<Product[]>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // If standard deserialization fails, try malformed JSON structure
+                var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -63,26 +70,11 @@
                     }).ToArray();
                 }
             }
-            else
-            {
-                errorMessage = $"Failed to fetch products. Status: {response.StatusCode}";
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            errorMessage = $"Network error: {ex.Message}";
-        }
-        catch (TaskCanceledException ex)
-        {
-            errorMessage = "Request timed out. Please try again.";
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            errorMessage = "Failed to parse product data.";
         }
         catch (Exception ex)
         {
-            errorMessage = $"An unexpected error occurred: {ex.Message}";
+            Console.WriteLine($"Error: {ex.Message}");
+            errorMessage = $"Error loading products: {ex.Message}";
         }
         finally
         {
