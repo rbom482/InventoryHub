@@ -9,7 +9,7 @@ namespace FullStackApp.Backend.Controllers
         [HttpGet]
         public ActionResult<IEnumerable<Product>> GetProducts()
         {
-            // Restored proper JSON structure
+            // Fixed JSON structure with correct property names
             var products = new List<Product>
             {
                 new Product { Id = 1, Name = "Laptop", Price = 999.99, Stock = 15 },

@@ -38,43 +38,54 @@
             isLoading = true;
             errorMessage = string.Empty;
             
+            // Make API call to fetch products
             var response = await Http.GetAsync("/api/productlist");
             response.EnsureSuccessStatusCode();
+            
             var json = await response.Content.ReadAsStringAsync();
             
-            // Try to deserialize as standard Product array first
-            try
+            // Log the response for debugging
+            Console.WriteLine($"API Response: {json}");
+            
+            // Handle the malformed JSON with different property names
+            var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(json, new JsonSerializerOptions
             {
-                products = System.Text.Json.JsonSerializer.Deserialize<Product[]>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-            }
-            catch (System.Text.Json.JsonException)
+                PropertyNameCaseInsensitive = true
+            });
+            
+            // Map API response to our Product model
+            if (apiProducts != null)
             {
-                // If standard deserialization fails, try malformed JSON structure
-                var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(json, new JsonSerializerOptions
+                products = apiProducts.Select(ap => new Product
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    Id = ap.ProductId,
+                    Name = ap.ProductName,
+                    Price = ap.Cost,
+                    Stock = ap.Quantity
+                }).ToArray();
                 
-                // Map API response to our Product model
-                if (apiProducts != null)
-                {
-                    products = apiProducts.Select(ap => new Product
-                    {
-                        Id = ap.ProductId,
-                        Name = ap.ProductName,
-                        Price = ap.Cost,
-                        Stock = ap.Quantity
-                    }).ToArray();
-                }
+                Console.WriteLine($"Successfully loaded {products.Length} products");
             }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Network error: {ex.Message}";
+            Console.WriteLine($"HTTP Error: {ex.Message}");
+        }
+        catch (TaskCanceledException ex)
+        {
+            errorMessage = "Request timed out. Please try again.";
+            Console.WriteLine($"Timeout Error: {ex.Message}");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            errorMessage = "Failed to parse product data. Invalid JSON format.";
+            Console.WriteLine($"JSON Error: {ex.Message}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
-            errorMessage = $"Error loading products: {ex.Message}";
+            errorMessage = $"An unexpected error occurred: {ex.Message}";
+            Console.WriteLine($"General Error: {ex.Message}");
         }
         finally
         {
