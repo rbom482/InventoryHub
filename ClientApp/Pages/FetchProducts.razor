@@ -9,7 +9,22 @@
     {
         foreach (var product in products)
         {
-            <li>@product.Name - $@product.Price (Stock: @product.Stock)</li>
+            <li>
+                <strong>@product.Name</strong> - $@product.Price.ToString("F2")
+                <br />
+                <small>
+                    Stock: @product.Stock | 
+                    Category: @product.Category.Name
+                    @if (!string.IsNullOrEmpty(product.Category.Description))
+                    {
+                        <span> - @product.Category.Description</span>
+                    }
+                    @if (product.UpdatedAt.HasValue)
+                    {
+                        <br />Last Updated: @product.UpdatedAt.Value.ToString("MMM dd, yyyy")
+                    }
+                </small>
+            </li>
         }
     }
     else if (isLoading)
@@ -47,24 +62,37 @@
             // Log the response for debugging
             Console.WriteLine($"API Response: {json}");
             
-            // Handle the malformed JSON with different property names
-            var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(json, new JsonSerializerOptions
+            // Handle the new standardized JSON structure with API response wrapper
+            var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<ProductResponse[]>>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
             
-            // Map API response to our Product model
-            if (apiProducts != null)
+            // Extract products from the API response wrapper
+            if (apiResponse?.Success == true && apiResponse.Data != null)
             {
-                products = apiProducts.Select(ap => new Product
+                products = apiResponse.Data.Select(p => new Product
                 {
-                    Id = ap.ProductId,
-                    Name = ap.ProductName,
-                    Price = ap.Cost,
-                    Stock = ap.Quantity
+                    Id = p.Id,
+                    Name = p.Name,
+                    Price = p.Price,
+                    Stock = p.Stock,
+                    Category = new Category
+                    {
+                        Id = p.Category.Id,
+                        Name = p.Category.Name,
+                        Description = p.Category.Description
+                    },
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt,
+                    IsActive = p.IsActive
                 }).ToArray();
                 
                 Console.WriteLine($"Successfully loaded {products.Length} products");
+            }
+            else
+            {
+                errorMessage = apiResponse?.Message ?? "Failed to load products";
             }
         }
         catch (HttpRequestException ex)
@@ -93,20 +121,53 @@
         }
     }
 
+    // Standardized product model matching backend response
     public class Product
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public double Price { get; set; }
+        public decimal Price { get; set; }
         public int Stock { get; set; }
+        public Category Category { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
     }
 
-    // API response model to handle malformed JSON
-    public class ApiProduct
+    // Category model for nested structure
+    public class Category
     {
-        public int ProductId { get; set; }
-        public string ProductName { get; set; } = string.Empty;
-        public double Cost { get; set; }
-        public int Quantity { get; set; }
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+
+    // API response models for deserialization
+    public class ApiResponse<T>
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public T? Data { get; set; }
+        public DateTime Timestamp { get; set; }
+        public int TotalCount { get; set; }
+    }
+
+    public class ProductResponse
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int Stock { get; set; }
+        public CategoryResponse Category { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    public class CategoryResponse
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
     }
 }
