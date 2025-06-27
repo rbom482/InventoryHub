@@ -1,0 +1,275 @@
+@page "/performance"
+@inject IApiService ApiService
+@inject ILogger<Performance> Logger
+@using ClientApp.Services
+@using System.Diagnostics
+
+<h3>Performance Benchmarking</h3>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>API Performance Tests</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Number of requests:</label>
+                    <input type="number" @bind="requestCount" class="form-control" min="1" max="50" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Test endpoint:</label>
+                    <select @bind="selectedEndpoint" class="form-select">
+                        <option value="/api/productlist">Product List (Cached)</option>
+                        <option value="/api/productlist/validate">Validation Endpoint</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" @onclick="RunPerformanceTest" disabled="@isRunning">
+                    @if (isRunning)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <text>Running...</text>
+                    }
+                    else
+                    {
+                        <text>Run Test</text>
+                    }
+                </button>
+                <button class="btn btn-secondary ms-2" @onclick="ClearResults">Clear Results</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Cache Performance</h5>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-warning" @onclick="TestCachePerformance" disabled="@isRunning">
+                    <text>Test Cache vs Fresh Data</text>
+                </button>
+                <button class="btn btn-danger ms-2" @onclick="ClearBackendCache" disabled="@isRunning">
+                    <text>Clear Backend Cache</text>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (performanceResults.Any())
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Performance Results</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Test</th>
+                                    <th>Requests</th>
+                                    <th>Total Time (ms)</th>
+                                    <th>Avg Time (ms)</th>
+                                    <th>Min Time (ms)</th>
+                                    <th>Max Time (ms)</th>
+                                    <th>Success Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var result in performanceResults.OrderByDescending(r => r.Timestamp))
+                                {
+                                    <tr>
+                                        <td>@result.TestName</td>
+                                        <td>@result.RequestCount</td>
+                                        <td>@result.TotalTime.ToString("F0")</td>
+                                        <td>@result.AverageTime.ToString("F2")</td>
+                                        <td>@result.MinTime.ToString("F0")</td>
+                                        <td>@result.MaxTime.ToString("F0")</td>
+                                        <td>
+                                            <span class="badge @(result.SuccessRate >= 0.95 ? "bg-success" : result.SuccessRate >= 0.8 ? "bg-warning" : "bg-danger")">
+                                                @result.SuccessRate.ToString("P0")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-info mt-3">
+        @statusMessage
+    </div>
+}
+
+@code {
+    private int requestCount = 10;
+    private string selectedEndpoint = "/api/productlist";
+    private bool isRunning = false;
+    private string statusMessage = string.Empty;
+    private List<PerformanceResult> performanceResults = new();
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("Performance benchmarking component initialized");
+    }
+
+    private async Task RunPerformanceTest()
+    {
+        isRunning = true;
+        statusMessage = $"Running {requestCount} requests to {selectedEndpoint}...";
+        
+        try
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var tasks = new List<Task<(bool Success, double ElapsedMs)>>();
+            
+            for (int i = 0; i < requestCount; i++)
+            {
+                tasks.Add(MakeTimedRequest(selectedEndpoint));
+            }
+
+            var results = await Task.WhenAll(tasks);
+            stopwatch.Stop();
+
+            var successfulRequests = results.Where(r => r.Success).ToList();
+            var responseTimes = successfulRequests.Select(r => r.ElapsedMs).ToList();
+
+            var performanceResult = new PerformanceResult
+            {
+                TestName = $"{selectedEndpoint} ({DateTime.Now:HH:mm:ss})",
+                RequestCount = requestCount,
+                TotalTime = stopwatch.Elapsed.TotalMilliseconds,
+                AverageTime = responseTimes.Any() ? responseTimes.Average() : 0,
+                MinTime = responseTimes.Any() ? responseTimes.Min() : 0,
+                MaxTime = responseTimes.Any() ? responseTimes.Max() : 0,
+                SuccessRate = (double)successfulRequests.Count / requestCount,
+                Timestamp = DateTime.Now
+            };
+
+            performanceResults.Add(performanceResult);
+            statusMessage = $"Test completed. {successfulRequests.Count}/{requestCount} requests successful.";
+            
+            Logger.LogInformation($"Performance test completed: {performanceResult.AverageTime:F2}ms average");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Test failed: {ex.Message}";
+            Logger.LogError(ex, "Performance test failed");
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task<(bool Success, double ElapsedMs)> MakeTimedRequest(string endpoint)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var response = await ApiService.GetAsync<object>(endpoint);
+            stopwatch.Stop();
+            return (response?.Success == true, stopwatch.Elapsed.TotalMilliseconds);
+        }
+        catch
+        {
+            stopwatch.Stop();
+            return (false, stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private async Task TestCachePerformance()
+    {
+        isRunning = true;
+        statusMessage = "Testing cache performance...";
+
+        try
+        {
+            // First request (cold cache)
+            var coldCacheResult = await MakeTimedRequest("/api/productlist");
+            
+            // Second request (warm cache)
+            var warmCacheResult = await MakeTimedRequest("/api/productlist");
+            
+            // Third request (confirm cache)
+            var confirmCacheResult = await MakeTimedRequest("/api/productlist");
+
+            var cacheResult = new PerformanceResult
+            {
+                TestName = $"Cache Test ({DateTime.Now:HH:mm:ss})",
+                RequestCount = 3,
+                TotalTime = coldCacheResult.ElapsedMs + warmCacheResult.ElapsedMs + confirmCacheResult.ElapsedMs,
+                AverageTime = (coldCacheResult.ElapsedMs + warmCacheResult.ElapsedMs + confirmCacheResult.ElapsedMs) / 3,
+                MinTime = Math.Min(Math.Min(coldCacheResult.ElapsedMs, warmCacheResult.ElapsedMs), confirmCacheResult.ElapsedMs),
+                MaxTime = Math.Max(Math.Max(coldCacheResult.ElapsedMs, warmCacheResult.ElapsedMs), confirmCacheResult.ElapsedMs),
+                SuccessRate = (coldCacheResult.Success && warmCacheResult.Success && confirmCacheResult.Success) ? 1.0 : 0.0,
+                Timestamp = DateTime.Now
+            };
+
+            performanceResults.Add(cacheResult);
+            statusMessage = $"Cache test completed. Cold: {coldCacheResult.ElapsedMs:F0}ms, Warm: {warmCacheResult.ElapsedMs:F0}ms, Cached: {confirmCacheResult.ElapsedMs:F0}ms";
+            
+            Logger.LogInformation($"Cache performance test completed");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Cache test failed: {ex.Message}";
+            Logger.LogError(ex, "Cache performance test failed");
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private async Task ClearBackendCache()
+    {
+        isRunning = true;
+        statusMessage = "Clearing backend cache...";
+
+        try
+        {
+            var response = await ApiService.GetDirectAsync<object>("/api/productlist/clear-cache");
+            statusMessage = "Backend cache cleared successfully";
+            Logger.LogInformation("Backend cache cleared via API");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Failed to clear cache: {ex.Message}";
+            Logger.LogError(ex, "Failed to clear backend cache");
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private void ClearResults()
+    {
+        performanceResults.Clear();
+        statusMessage = "Results cleared";
+    }
+
+    private class PerformanceResult
+    {
+        public string TestName { get; set; } = string.Empty;
+        public int RequestCount { get; set; }
+        public double TotalTime { get; set; }
+        public double AverageTime { get; set; }
+        public double MinTime { get; set; }
+        public double MaxTime { get; set; }
+        public double SuccessRate { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+}

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using FullStackApp.Backend.Data;
 using FullStackApp.Backend.Models;
+using FullStackApp.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,9 +10,16 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Add response caching for performance optimization
+builder.Services.AddResponseCaching();
+builder.Services.AddMemoryCache();
+
 // Add Entity Framework
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Add services for dependency injection
+builder.Services.AddScoped<IProductService, ProductService>();
 
 var app = builder.Build();
 
@@ -24,6 +32,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Add response caching middleware for performance
+app.UseResponseCaching();
+
 // Add CORS configuration as specified
 app.UseCors(policy =>
     policy.AllowAnyOrigin()
@@ -32,96 +43,10 @@ app.UseCors(policy =>
 
 app.UseAuthorization();
 
-// Add Minimal API endpoint for standardized JSON format
-app.MapGet("/api/productlist", () =>
+// Add Minimal API endpoint for standardized JSON format with caching
+app.MapGet("/api/productlist", async (IProductService productService) =>
 {
-    var products = new List<ProductResponse>
-    {
-        new ProductResponse
-        {
-            Id = 1,
-            Name = "Laptop",
-            Price = 1200.50m,
-            Stock = 25,
-            Category = new CategoryResponse { Id = 101, Name = "Electronics", Description = "Electronic devices and gadgets" },
-            CreatedAt = DateTime.UtcNow.AddDays(-30),
-            UpdatedAt = DateTime.UtcNow.AddDays(-5),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 2,
-            Name = "Headphones",
-            Price = 50.00m,
-            Stock = 100,
-            Category = new CategoryResponse { Id = 102, Name = "Accessories", Description = "Computer and electronic accessories" },
-            CreatedAt = DateTime.UtcNow.AddDays(-25),
-            UpdatedAt = DateTime.UtcNow.AddDays(-3),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 3,
-            Name = "Wireless Mouse",
-            Price = 35.99m,
-            Stock = 75,
-            Category = new CategoryResponse { Id = 102, Name = "Accessories", Description = "Computer and electronic accessories" },
-            CreatedAt = DateTime.UtcNow.AddDays(-20),
-            UpdatedAt = DateTime.UtcNow.AddDays(-2),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 4,
-            Name = "4K Monitor",
-            Price = 299.99m,
-            Stock = 15,
-            Category = new CategoryResponse { Id = 101, Name = "Electronics", Description = "Electronic devices and gadgets" },
-            CreatedAt = DateTime.UtcNow.AddDays(-15),
-            UpdatedAt = DateTime.UtcNow.AddDays(-1),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 5,
-            Name = "Mechanical Keyboard",
-            Price = 89.99m,
-            Stock = 45,
-            Category = new CategoryResponse { Id = 102, Name = "Accessories", Description = "Computer and electronic accessories" },
-            CreatedAt = DateTime.UtcNow.AddDays(-12),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 6,
-            Name = "Webcam HD",
-            Price = 79.99m,
-            Stock = 30,
-            Category = new CategoryResponse { Id = 101, Name = "Electronics", Description = "Electronic devices and gadgets" },
-            CreatedAt = DateTime.UtcNow.AddDays(-10),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 7,
-            Name = "USB-C Hub",
-            Price = 49.99m,
-            Stock = 60,
-            Category = new CategoryResponse { Id = 102, Name = "Accessories", Description = "Computer and electronic accessories" },
-            CreatedAt = DateTime.UtcNow.AddDays(-8),
-            IsActive = true
-        },
-        new ProductResponse
-        {
-            Id = 8,
-            Name = "External SSD",
-            Price = 149.99m,
-            Stock = 20,
-            Category = new CategoryResponse { Id = 103, Name = "Storage", Description = "Data storage solutions" },
-            CreatedAt = DateTime.UtcNow.AddDays(-5),
-            IsActive = true
-        }
-    };
+    var products = await productService.GetProductsAsync();
 
     var response = new ApiResponse<List<ProductResponse>>
     {
@@ -135,6 +60,46 @@ app.MapGet("/api/productlist", () =>
     return Results.Ok(response);
 })
 .WithName("GetProductList")
+.WithTags("Products")
+.WithOpenApi();
+
+// Add cache management endpoint for development
+app.MapPost("/api/productlist/clear-cache", (IProductService productService) =>
+{
+    productService.ClearCache();
+    return Results.Ok(new { Success = true, Message = "Cache cleared successfully", Timestamp = DateTime.UtcNow });
+})
+.WithName("ClearProductCache")
+.WithTags("Products")
+.WithOpenApi();
+
+// Add individual product endpoint
+app.MapGet("/api/productlist/{id}", async (int id, IProductService productService) =>
+{
+    var product = await productService.GetProductAsync(id);
+    if (product == null)
+    {
+        return Results.NotFound(new ApiResponse<object>
+        {
+            Success = false,
+            Message = $"Product with ID {id} not found",
+            Data = null,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    var response = new ApiResponse<ProductResponse>
+    {
+        Success = true,
+        Message = "Product retrieved successfully",
+        Data = product,
+        TotalCount = 1,
+        Timestamp = DateTime.UtcNow
+    };
+
+    return Results.Ok(response);
+})
+.WithName("GetProduct")
 .WithTags("Products")
 .WithOpenApi();
 

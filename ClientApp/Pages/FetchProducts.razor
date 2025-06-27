@@ -1,6 +1,7 @@
 @page "/fetchproducts"
-@inject HttpClient Http
-@using System.Linq
+@inject IApiService ApiService
+@inject ILogger<FetchProducts> Logger
+@using ClientApp.Services
 
 <h3>Product List</h3>
 
@@ -21,7 +22,7 @@
                     }
                     @if (product.UpdatedAt.HasValue)
                     {
-                        <br />Last Updated: @product.UpdatedAt.Value.ToString("MMM dd, yyyy")
+                        <br /><text>Last Updated: @product.UpdatedAt.Value.ToString("MMM dd, yyyy")</text>
                     }
                 </small>
             </li>
@@ -53,25 +54,13 @@
             isLoading = true;
             errorMessage = string.Empty;
             
-            // Make API call to fetch products
-            var response = await Http.GetAsync("/api/productlist");
-            response.EnsureSuccessStatusCode();
+            Logger.LogInformation("Loading products from API using ApiService");
             
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await ApiService.GetAsync<List<ProductResponse>>("/api/productlist");
             
-            // Log the response for debugging
-            Console.WriteLine($"API Response: {json}");
-            
-            // Handle the new standardized JSON structure with API response wrapper
-            var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<ProductResponse[]>>(json, new JsonSerializerOptions
+            if (response?.Success == true && response.Data != null)
             {
-                PropertyNameCaseInsensitive = true
-            });
-            
-            // Extract products from the API response wrapper
-            if (apiResponse?.Success == true && apiResponse.Data != null)
-            {
-                products = apiResponse.Data.Select(p => new Product
+                products = response.Data.Select(p => new Product
                 {
                     Id = p.Id,
                     Name = p.Name,
@@ -88,32 +77,28 @@
                     IsActive = p.IsActive
                 }).ToArray();
                 
-                Console.WriteLine($"Successfully loaded {products.Length} products");
+                Logger.LogInformation($"Successfully loaded {products.Length} products");
             }
             else
             {
-                errorMessage = apiResponse?.Message ?? "Failed to load products";
+                errorMessage = response?.Message ?? "Failed to load products";
+                Logger.LogWarning($"API response unsuccessful: {errorMessage}");
             }
         }
         catch (HttpRequestException ex)
         {
             errorMessage = $"Network error: {ex.Message}";
-            Console.WriteLine($"HTTP Error: {ex.Message}");
+            Logger.LogError(ex, "Network error while loading products");
         }
         catch (TaskCanceledException ex)
         {
             errorMessage = "Request timed out. Please try again.";
-            Console.WriteLine($"Timeout Error: {ex.Message}");
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            errorMessage = "Failed to parse product data. Invalid JSON format.";
-            Console.WriteLine($"JSON Error: {ex.Message}");
+            Logger.LogError(ex, "Timeout error while loading products");
         }
         catch (Exception ex)
         {
             errorMessage = $"An unexpected error occurred: {ex.Message}";
-            Console.WriteLine($"General Error: {ex.Message}");
+            Logger.LogError(ex, "Unexpected error while loading products");
         }
         finally
         {
@@ -121,53 +106,6 @@
         }
     }
 
-    // Standardized product model matching backend response
-    public class Product
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public decimal Price { get; set; }
-        public int Stock { get; set; }
-        public Category Category { get; set; } = new();
-        public DateTime CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
-        public bool IsActive { get; set; }
-    }
-
-    // Category model for nested structure
-    public class Category
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-    }
-
-    // API response models for deserialization
-    public class ApiResponse<T>
-    {
-        public bool Success { get; set; }
-        public string Message { get; set; } = string.Empty;
-        public T? Data { get; set; }
-        public DateTime Timestamp { get; set; }
-        public int TotalCount { get; set; }
-    }
-
-    public class ProductResponse
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public decimal Price { get; set; }
-        public int Stock { get; set; }
-        public CategoryResponse Category { get; set; } = new();
-        public DateTime CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
-        public bool IsActive { get; set; }
-    }
-
-    public class CategoryResponse
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-    }
+    // Models now imported from Services
+    // Removed duplicate model definitions to prevent redundancy
 }
