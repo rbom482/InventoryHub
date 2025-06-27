@@ -1,5 +1,6 @@
 @page "/fetchproducts"
 @inject HttpClient Http
+@using System.Linq
 
 <h3>Product List</h3>
 
@@ -38,15 +39,29 @@
             errorMessage = string.Empty;
             
             // Make API call to fetch products
-            var response = await Http.GetAsync("/api/products");
+            var response = await Http.GetAsync("/api/productlist");
             
             if (response.IsSuccessStatusCode)
             {
                 var jsonContent = await response.Content.ReadAsStringAsync();
-                products = System.Text.Json.JsonSerializer.Deserialize<Product[]>(jsonContent, new JsonSerializerOptions
+                
+                // Handle the malformed JSON with different property names
+                var apiProducts = System.Text.Json.JsonSerializer.Deserialize<ApiProduct[]>(jsonContent, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
+                
+                // Map API response to our Product model
+                if (apiProducts != null)
+                {
+                    products = apiProducts.Select(ap => new Product
+                    {
+                        Id = ap.ProductId,
+                        Name = ap.ProductName,
+                        Price = ap.Cost,
+                        Stock = ap.Quantity
+                    }).ToArray();
+                }
             }
             else
             {
@@ -81,5 +96,14 @@
         public string Name { get; set; } = string.Empty;
         public double Price { get; set; }
         public int Stock { get; set; }
+    }
+
+    // API response model to handle malformed JSON
+    public class ApiProduct
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public double Cost { get; set; }
+        public int Quantity { get; set; }
     }
 }
