@@ -14,7 +14,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowBlazorApp",
         policy =>
         {
-            policy.WithOrigins("https://localhost:7000", "http://localhost:5000", "http://localhost:3000")
+            policy.WithOrigins("https://localhost:9999") // Wrong port to simulate CORS error
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });

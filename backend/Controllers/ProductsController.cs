@@ -3,23 +3,23 @@ using Microsoft.AspNetCore.Mvc;
 namespace FullStackApp.Backend.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/productlist")]
     public class ProductsController : ControllerBase
     {
         [HttpGet]
-        public ActionResult<IEnumerable<Product>> GetProducts()
+        public ActionResult<object> GetProducts()
         {
-            // Sample product data - replace with actual database call
-            var products = new List<Product>
+            // Malformed JSON structure - different property names
+            var products = new List<object>
             {
-                new Product { Id = 1, Name = "Laptop", Price = 999.99, Stock = 15 },
-                new Product { Id = 2, Name = "Mouse", Price = 29.99, Stock = 50 },
-                new Product { Id = 3, Name = "Keyboard", Price = 79.99, Stock = 25 },
-                new Product { Id = 4, Name = "Monitor", Price = 299.99, Stock = 8 },
-                new Product { Id = 5, Name = "Headphones", Price = 149.99, Stock = 20 },
-                new Product { Id = 6, Name = "Webcam", Price = 89.99, Stock = 12 },
-                new Product { Id = 7, Name = "USB Cable", Price = 12.99, Stock = 100 },
-                new Product { Id = 8, Name = "External Hard Drive", Price = 119.99, Stock = 18 }
+                new { ProductId = 1, ProductName = "Laptop", Cost = 999.99, Quantity = 15 },
+                new { ProductId = 2, ProductName = "Mouse", Cost = 29.99, Quantity = 50 },
+                new { ProductId = 3, ProductName = "Keyboard", Cost = 79.99, Quantity = 25 },
+                new { ProductId = 4, ProductName = "Monitor", Cost = 299.99, Quantity = 8 },
+                new { ProductId = 5, ProductName = "Headphones", Cost = 149.99, Quantity = 20 },
+                new { ProductId = 6, ProductName = "Webcam", Cost = 89.99, Quantity = 12 },
+                new { ProductId = 7, ProductName = "USB Cable", Cost = 12.99, Quantity = 100 },
+                new { ProductId = 8, ProductName = "External Hard Drive", Cost = 119.99, Quantity = 18 }
             };
 
             return Ok(products);
